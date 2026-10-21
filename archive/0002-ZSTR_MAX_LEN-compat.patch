@@ -1,0 +1,24 @@
+From: php-eol-patch project
+Subject: [PATCH] Provide ZSTR_MAX_LEN for vanilla PHP 7.3
+
+Vanilla PHP 7.3 does not define ZSTR_MAX_LEN (introduced in PHP 7.4).
+The CVE-2026-109618/109619 minimal mitigation patch (0001) uses it in the
+VM CONCAT integer-overflow checks, so without this compat shim the patched
+tree does not compile. Same semantics as the PHP 7.4 definition.
+
+--- a/Zend/zend_string.h
++++ b/Zend/zend_string.h
+@@ -76,6 +76,13 @@
+ 
+ #define _ZSTR_STRUCT_SIZE(len) (_ZSTR_HEADER_SIZE + len + 1)
+ 
++/* Added by php-eol-patch 0002: ZSTR_MAX_LEN does not exist in vanilla 7.3,
++   but the CVE-2026-109618/109619 mitigation patch uses it in the VM
++   CONCAT overflow checks. Same definition as PHP 7.4+ provides. */
++#ifndef ZSTR_MAX_LEN
++#define ZSTR_MAX_LEN (SIZE_MAX - _ZSTR_HEADER_SIZE - 1)
++#endif
++
+ #define ZSTR_ALLOCA_ALLOC(str, _len, use_heap) do { \
+ 	(str) = (zend_string *)do_alloca(ZEND_MM_ALIGNED_SIZE_EX(_ZSTR_STRUCT_SIZE(_len), 8), (use_heap)); \
+ 	GC_SET_REFCOUNT(str, 1); \
