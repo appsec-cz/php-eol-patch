@@ -43,6 +43,7 @@ $body = "--$boundary\r\n"
 
 $ini = [
     'error_reporting' => 'E_ALL',
+    'display_startup_errors' => '1',
     'html_errors' => '0',
     'file_uploads' => '1',
     'upload_max_filesize' => '1024',

@@ -89,6 +89,7 @@ $body = "--$boundary\r\n"
 
 $ini = [
     'error_reporting' => 'E_ALL&~E_DEPRECATED',
+    'display_startup_errors' => '1',
     'file_uploads' => '1',
     'upload_max_filesize' => '1024',
     'session.save_path' => $dir,

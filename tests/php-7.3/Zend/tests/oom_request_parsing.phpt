@@ -29,15 +29,18 @@ function oom_post(string $body, string $script, array $ini): void
     $bodyFile = tempnam(sys_get_temp_dir(), 'oom_request_parsing');
     file_put_contents($bodyFile, $body);
 
-    $cmd = [getenv('TEST_PHP_CGI_EXECUTABLE'), '-n'];
+    /* PHP 7.3 adaptation: proc_open() takes a string command here, and the
+     * descriptors cannot be STDOUT/STDERR streams, so the output is relayed
+     * through pipes (each run prints a single fatal error line, which fits
+     * the pipe buffer easily). */
+    $cmd = escapeshellarg(getenv('TEST_PHP_CGI_EXECUTABLE')) . ' -n';
     foreach ($ini as $entry) {
-        $cmd[] = '-d';
-        $cmd[] = $entry;
+        $cmd .= ' -d ' . escapeshellarg($entry);
     }
 
     $p = proc_open(
         $cmd,
-        [['file', $bodyFile, 'r'], STDOUT, STDERR],
+        [['file', $bodyFile, 'r'], ['pipe', 'w'], ['pipe', 'w']],
         $pipes,
         null,
         [
@@ -48,8 +51,13 @@ function oom_post(string $body, string $script, array $ini): void
             'REDIRECT_STATUS' => '1',
         ]
     );
+    $out = stream_get_contents($pipes[1]);
+    $err = stream_get_contents($pipes[2]);
+    fclose($pipes[1]);
+    fclose($pipes[2]);
     proc_close($p);
     unlink($bodyFile);
+    echo $out, $err;
 }
 
 /* Deeply nested variable names, at the default max_input_vars and
@@ -57,10 +65,10 @@ function oom_post(string $body, string $script, array $ini): void
 oom_post(
     implode('&', array_fill(0, 1000, 'a[]' . str_repeat('[b]', 63) . '=c')),
     $tiny,
-    ['memory_limit=8M', 'html_errors=0']
+    ['memory_limit=8M', 'html_errors=0', 'display_startup_errors=1']
 );
 
-$ini = ['memory_limit=8M', 'post_max_size=1G', 'max_input_vars=10000000', 'html_errors=0'];
+$ini = ['memory_limit=8M', 'post_max_size=1G', 'max_input_vars=10000000', 'html_errors=0', 'display_startup_errors=1'];
 
 /* One value with no '&' in it: nothing consumes it, so add_post_vars() never
  * gets a complete variable to check and only the read loop can notice. */

@@ -105,13 +105,32 @@ side-by-side source comparison; see
 patch also does not compile on the vanilla tarball without a `ZSTR_MAX_LEN`
 shim and omits `max_multipart_body_parts` — both are handled here.
 
-## PHP 7.4.33
+## PHP 7.4.33 — the patch
 
-`patches/php-7.4/CVE-2026-109618-109619-minimal-mitigation.patch` is the
-official EOL commit from the php-src `PHP-7.4-CVE-2026-109618-109619` branch
-(`712e60f9edfd…`). It applies to the vanilla 7.4.33 tarball as-is and already
-includes `max_multipart_body_parts`. (A full-backport variant for 7.4 is not
-planned — the official patch is sufficient there.)
+`patches/php-7.4/0001-CVE-2026-109618-109619-avoid-state-corruption.patch`
+
+The **same full backport** as the 7.3 `0001`, adapted to the vanilla PHP
+7.4.33 tarball: upstream 8.2.35 semantics (delayed OOM, hard limit,
+feature-preserving session hardening, cross-request hygiene) plus every
+hardening item from the official EOL minimal mitigation — a superset of both
+approaches. The `max_multipart_body_parts` limit (CVE-2023-0662) is **folded
+into this patch**, so the 7.4 series needs no separate `0002`:
+
+```sh
+tar -xzf php-7.4.33.tar.gz
+cd php-7.4.33
+patch -p1 < /path/to/patches/php-7.4/0001-CVE-2026-109618-109619-avoid-state-corruption.patch
+# then configure && make as usual
+```
+
+7.4-specific notes: `ZSTR_MAX_LEN` already exists (no compat shim needed),
+the `_SESSION` key is created without `ZSTR_INIT_LITERAL` (that macro is
+8.0+), and the hardened unserializer path also covers the 7.4
+`__unserialize()` / `__serialize()` mechanism. The behavior table in the 7.3
+section above applies unchanged (soft OOM → clean fatal, worker survives;
+hard limit → `_exit(137)`). The official EOL minimal mitigation commit it
+supersedes is kept for reference in
+`archive/CVE-2026-109618-109619-php-7.4-minimal-mitigation.patch`.
 
 ## More CVEs
 
@@ -122,8 +141,9 @@ commit references and current status.
 
 ## Verifying a patched build
 
-Adapted upstream regression tests live in `tests/php-7.3/` (source layout
-preserved). Copy them into the patched source tree and run:
+Adapted upstream regression tests live in `tests/php-7.3/` and
+`tests/php-7.4/` (source layout preserved). Copy them into the patched
+source tree and run (7.3 shown; substitute `php-7.4` paths for 7.4):
 
 ```sh
 cp -r tests/php-7.3/tests/basic/oom_rfc1867* php-7.3.33/tests/basic/
@@ -144,8 +164,8 @@ officially patched PHP 8.4.27 server. Trust the behavioral OOM tests above.
 
 ## Known limitations
 
-- 7.3 lacks the fallible-allocator API audit that upstream did across the
-  engine; under extreme OOM pressure a patched 7.3 can still die with
+- 7.3 and 7.4 lack the fallible-allocator API audit that upstream did across
+  the engine; under extreme OOM pressure a patched build can still die with
   `SIGSEGV` instead of a clean fatal error (availability impact only,
   no corruption).
 - Only the exact tarballs named above are verified. Other 7.3.x/7.4.x
@@ -157,7 +177,10 @@ officially patched PHP 8.4.27 server. Trust the behavioral OOM tests above.
   Security Team) and incorporates hardening from the official EOL minimal
   mitigation (Arnaud Le Blanc, co-author Ilija Tovilo) as shipped in Ondřej
   Surý's php7.3 packaging.
-- The 7.4 patch is the official EOL commit `712e60f9edfd…` (PHP Security Team).
+- The 7.4 `0001` patch ports the same upstream commit `01a40e89fbfc` to
+  7.4.33 and incorporates hardening from the official EOL commit
+  `712e60f9edfd…` (PHP Security Team; the original minimal-mitigation patch
+  is kept in `archive/`).
 - Series `01xx`/`02xx` patches port the upstream commits referenced in each
   patch header; see `docs/BACKLOG.md`.
 - All patches are derived works of php-src and are distributed under the

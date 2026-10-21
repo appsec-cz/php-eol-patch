@@ -16,10 +16,10 @@ echo get_class(new Foo), "\n";
 trigger_error("Bar", E_USER_WARNING);
 ob_end_flush();
 PHP
-, 'index.php', ['-d', 'memory_limit=8M', '-d', 'post_max_size=64M', '-d', 'html_errors=0']);
+, 'index.php', '-d memory_limit=8M -d post_max_size=64M -d html_errors=0 -d display_startup_errors=1');
 
 function send_req(string $request): string {
-    $fp = php_cli_server_connect();
+    $fp = fsockopen(PHP_CLI_SERVER_HOSTNAME, PHP_CLI_SERVER_PORT);
     fwrite($fp, $request);
     $response = stream_get_contents($fp);
     fclose($fp);
