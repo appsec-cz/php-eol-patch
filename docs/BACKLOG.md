@@ -1,4 +1,4 @@
-# Backport backlog for PHP 7.3.33
+# Backport backlog for PHP 7.3.33 / 7.4.33
 
 Research date: 2026-10-21. Presence of vulnerable code verified against the
 vanilla `php-7.3.33` tree. Numbering scheme: Tier 1 → `0101+`,
@@ -47,3 +47,35 @@ CVE-2026-93682. Already fixed in 7.3.33: CVE-2021-21703, CVE-2021-21707.
 Needs a custom approach: CVE-2023-3823 (libxml XXE), CVE-2022-31631
 (PDO::quote SQLite, ~2 GB input), CVE-2023-3247 (SOAP digest RNG,
 client-side).
+
+## PHP 7.4.33 status of the same list
+
+Vulnerable code verified against the vanilla `php-7.4.33` tree
+(2026-10-22). 7.4.33 postdates 7.3.33 by a year, so several fixes are
+already upstream there.
+
+| # | CVE | 7.4.33 status | Patch |
+|---|---|---|---|
+| 0001 | CVE-2026-109618 + CVE-2026-109619 | ☑ full backport (same design as 7.3) | `0001` |
+| 0002 | CVE-2023-0662 | ☑ folded into 7.4 `0001` | — |
+| 0101 | CVE-2026-91768 | ☑ ported (vanilla vulnerable) | `0101` |
+| 0102 | CVE-2026-6722 | ☑ ported (vanilla vulnerable) | `0102` |
+| 0104 | CVE-2022-31626 | not needed — fixed upstream in 7.4.30 | — |
+| 0105 | CVE-2023-3824 | ☑ ported; 7.4 has `ssize_t` read op, so the upstream 8.0 fix applies verbatim (no 7.3 `return 0` workaround) | `0105` |
+| 0106 | CVE-2022-31625 | not needed — fixed upstream in 7.4.30 | — |
+| 0201 | CVE-2024-2756 | ☑ ported (only this half; CVE-2022-31629 is already in 7.4.33). Matches upstream final state: helper `php_is_forbidden_variable_name()` + insertion-point guards, early `strncmp` block removed | `0201` |
+| 0202 | CVE-2024-5458 | ☑ ported | `0202` |
+| 0203 | CVE-2024-3096 + CVE-2023-0567 | ☑ ported; NUL-byte check goes into `php_password_bcrypt_hash()` (7.4 already has the 8.0-style algo registry) | `0203` |
+| 0204 | CVE-2024-8929 | ☑ ported near-textually (offsets + two `const` drift points); tests need mysqlnd compression disabled (handshake byte-matching) | `0204` |
+| 0205 | CVE-2025-14181 | ☑ ported; `ZSTR_MAX_LEN` is native in 7.4 (compat shim dropped), `len_size`/`len_read` already wider | `0205` |
+| 0206 | CVE-2026-91765 | ☑ ported on top of `0102` (shared `php_encoding.c` regions); vanilla SIGSEGVs on a deep href-chain, patched returns a clean SOAP fault | `0206` |
+| 0207 | CVE-2024-8925 | ☑ ported; hunk lands inside the 0001-rewritten `rfc1867.c` (boundary setup region untouched by 0001) | `0207` |
+
+Series order for 7.4: `0001` first, then the rest in numeric order —
+verified as a zero-fuzz `patch -p1` chain on the vanilla tarball.
+
+Whole-series notes: the full `patch -p1` chain (0001 + 01xx/02xx) applies
+with zero fuzz on vanilla 7.4.33. Each ported patch was verified with:
+patched build PASS / vanilla build FAIL (or ASAN/UBSAN demonstration) on
+the CVE regression tests, plus a per-extension regression sweep with no
+patched-only failures.

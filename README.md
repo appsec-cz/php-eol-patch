@@ -136,8 +136,21 @@ supersedes is kept for reference in
 
 Additional backports for internet-facing EOL PHP live in the same numbered
 series (`01xx` = pre-auth RCE / memory corruption, `02xx` = logic bypasses /
-info leaks / DoS). See `docs/BACKLOG.md` for the full list, per-CVE upstream
-commit references and current status.
+info leaks / DoS) under **both** `patches/php-7.3/` and `patches/php-7.4/`,
+with identical numbers for identical CVEs. See `docs/BACKLOG.md` for the full
+list, per-CVE upstream commit references and current status.
+
+7.4 specifics of the extended series:
+
+- `0104` (CVE-2022-31626, mysqlnd) and `0106` (CVE-2022-31625, pgsql) are
+  **not shipped for 7.4** — 7.4.33 already contains those upstream fixes
+  (they landed in 7.4.30, before 7.4 EOL).
+- `0201` for 7.4 covers **only CVE-2024-2756** — 7.4.33 already ships the
+  CVE-2022-31629 part. The patch matches upstream's final state (the early
+  `strncmp` block is removed when the `php_is_forbidden_variable_name()`
+  helper is introduced).
+- CVE-2023-0662 (`max_multipart_body_parts`, the 7.3 series' `0002`) is
+  folded into the 7.4 `0001`, so the 7.4 series has no `0002`.
 
 ## Verifying a patched build
 
@@ -168,6 +181,12 @@ officially patched PHP 8.4.27 server. Trust the behavioral OOM tests above.
   the engine; under extreme OOM pressure a patched build can still die with
   `SIGSEGV` instead of a clean fatal error (availability impact only,
   no corruption).
+- The `0001` hard limit changes the observable behavior of two upstream
+  tests (`ext/standard/tests/streams/bug61115-1.phpt`,
+  `ext/standard/tests/strings/wordwrap_memory_limit.phpt`): instead of a
+  catchable `Allowed memory size …` fatal the worker is hard-killed once the
+  hard limit trips. This is the deliberate fail-fast design, not a
+  regression in request handling.
 - Only the exact tarballs named above are verified. Other 7.3.x/7.4.x
   releases may need fuzz.
 
