@@ -100,7 +100,7 @@ series verification" at the end of this section).
 | 0109 | CVE-2026-129289 (GHSA-qc49-hpvq-g2w6) | main/SAPI.c, main/fastcgi.c | unread request body left on a kept FastCGI connection is parsed as the next request | `28014fd092c7` | ☑ verbatim; **no regression test for the request sequence shipped** (see notes) |
 | 0110 | CVE-2026-115560 (GHSA-658j-r8rw-q6mx) | ext/session | upload progress writes the session with the php.ini serializer before the application switches serializer at runtime → object injection | `3f70f6661158` | ☑ upstream semantics + 7.x-only guard points + one documented deviation |
 | 0111 | CVE-2026-129291 (GHSA-jm4m-qfqx-967m) | sapi/fpm (fpm_children.c) | worker stdio pipe closed without removing its event; master keeps an event pointing into the freed child | `8c38b7914497` | ☑ verbatim |
-| 0112 | CVE-2026-129506 (GHSA-4646-p932-gw34) | ext/soap | DTD node freed while attribute entity references still point into it | `66db5cda7df3` | ◐ in progress - not part of the series yet (will ship as `0215`: it must apply after `0206`, which rewrote the same function) |
+| 0112 | CVE-2026-129506 (GHSA-4646-p932-gw34) | ext/soap | DTD node freed while attribute entity references still point into it | `66db5cda7df3` + [PR #25605](https://github.com/php/php-src/pull/25605) | ☑ **shipped as `0215`** — it must apply after `0206`, which rewrote the same function |
 | 0113 | CVE-2026-129481 (GHSA-g3vh-838c-65v7) | Zend/zend_API.c | process continues after a bailout interrupted request shutdown, with later modules' RSHUTDOWN skipped | `ad9b44ae6119` (8.3+ only) | ☑ hardening half only; the literal upstream defect (`session_started_filename`) does not exist in 7.x |
 | 0114 | CVE-2026-129474 (GHSA-8mjj-2r7p-4hg2) | Zend (debug_backtrace) | backtrace argument collection assumes relocated extra args for `__call`/`__callStatic` trampoline frames | `03c403286d94` (8.5+ only) | ☑ **hardening backport** — the faulty read pattern exists in 7.x, but no failure was demonstrated on 7.x |
 
@@ -156,6 +156,15 @@ GHSA-mg3p-mxj9-g2mm / CVE-2026-129438 and CVE-2026-48841 (ext/uri, 8.5+).
 - **0109** — a kept FastCGI connection whose last STDIN record was not
   fully consumed is closed instead of reused; an unread body is drained at
   request end also when `php://input` was opened.
+- **0215** — `SoapServer::handle()` without an argument now rejects any
+  request carrying a DOCTYPE with a "DTD are not supported by SOAP" fault;
+  7.x used to strip the DTD silently. Same as upstream. The patch includes
+  the upstream follow-up from php-src PR #25605 (not merged when this was
+  written): `node_is_equal_ex()` no longer matches non-element nodes, so a
+  DTD kept in the tree and named like the root element (`<!DOCTYPE
+  Envelope>`, `definitions`, `schema`) is not taken for it. Without that
+  part the first upstream commit crashes `SoapServer::handle()` and WSDL /
+  schema loading on such documents.
 
 ### Notes
 
@@ -179,8 +188,7 @@ GHSA-mg3p-mxj9-g2mm / CVE-2026-129438 and CVE-2026-48841 (ext/uri, 8.5+).
 - 7.3's `run-tests.php` forces `USE_ZEND_ALLOC=1`, so AddressSanitizer runs
   through run-tests on 7.3 do not see request-heap bugs; decisive cases
   were run by hand with `USE_ZEND_ALLOC=0`.
-- Number `0211` is intentionally unused; `0112` / `0215` is reserved for
-  CVE-2026-129506 (see the Tier 1 table).
+- Number `0211` is intentionally unused; `0112` is shipped as `0215`.
 
 ### Open follow-ups found during this batch
 
@@ -206,13 +214,13 @@ Environment: Rocky Linux 8, gcc 8, OpenSSL 1.1.1, libxml2 2.9.7,
 **linux/arm64**; `-O2 -g` ("rel") and `--enable-debug -fsanitize=address`
 ("asan") builds of both versions from the vanilla php.net tarballs.
 
-- The complete series (7.3: 27 patches, 7.4: 24 patches) applies in numeric
+- The complete series (7.3: 28 patches, 7.4: 25 patches) applies in numeric
   order with GNU patch: no fuzz and no rejects anywhere, no line offsets in
   any patch of this batch.
 - rel and asan builds succeed with the same compiler-warning counts as the
   series before this batch.
 - All regression tests of this batch pass on the final rel builds
-  (7.3: 30 `.phpt`, 7.4: 29 `.phpt`).
+  (7.3: 36 `.phpt`, 7.4: 35 `.phpt`).
 - Sweep of `Zend/tests`, `ext/{date,pcre,phar,session,soap}/tests`,
   `ext/standard/tests/{http,streams,general_functions}`,
   `sapi/{cgi,cli,fpm}/tests`, `tests/basic`, `tests/output` on rel, final
@@ -224,8 +232,11 @@ Environment: Rocky Linux 8, gcc 8, OpenSSL 1.1.1, libxml2 2.9.7,
   skipped on 7.4 asan because it needs the Zend allocator), no
   AddressSanitizer report. See the note above about 7.3's run-tests and
   `USE_ZEND_ALLOC`.
-- The two sweeps above were run with the pending ext/soap patch
-  (CVE-2026-129506) applied on top. For the series as published that patch
-  was taken out again, the four trees were rebuilt and `ext/soap/tests`
-  re-run on rel and asan for both versions: only the network-dependent
-  `bug71610.phpt` fails, as before this batch.
+- The two sweeps above were run with an earlier version of `0215`. The
+  final `0215` touches only `ext/soap/php_xml.c`; with it `ext/soap/tests`
+  was re-run on rel and asan for both versions (7.3: 541 tests, 7.4: 548):
+  only the network-dependent `bug71610.phpt` fails, as before this batch.
+  Of the six `0215` tests, four fail on the series without `0215` (the
+  WSDL and schema tests pass there, because the DTD was still stripped),
+  and the four tests from PR #25605 fail with only the first upstream
+  commit applied.
