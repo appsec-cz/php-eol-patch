@@ -145,7 +145,7 @@ list, per-CVE upstream commit references and current status.
 ### 2026-11-19 batch (PHP 8.2.36 / 8.3.37 / 8.4.28 / 8.5.13 / 8.6.0)
 
 The security fixes released by the PHP project on 2026-11-19 are covered by
-patches `0107`-`0114` and `0208`-`0214` for both versions:
+patches `0107`-`0114` and `0208`-`0215` for both versions:
 
 | Patch | CVE | What |
 |---|---|---|
@@ -162,11 +162,11 @@ patches `0107`-`0114` and `0208`-`0214` for both versions:
 | `0212` | CVE-2026-129292 + CVE-2026-6735 | FPM status page: escape request fields in html/xml/json |
 | `0213` | CVE-2026-129538 | php-cgi: PATH_INFO pointer underflow |
 | `0214` | CVE-2026-103111 (+ further PCRE2 advisories) | bundled PCRE2 maintenance fixes |
+| `0215` | CVE-2026-129506 | SOAP: keep the DTD node alive, never match it as an element (numbered `0215` because it must apply after `0206`) |
 
 CVE-2026-127960 (folded HTTP headers DoS) does not affect 7.3/7.4 and has no
-patch; number `0211` is unused. The backport for CVE-2026-129506 (ext/soap)
-is still in progress and not part of the series yet. Four further
-advisories of that release concern code that only exists in PHP 8.4/8.5.
+patch; number `0211` is unused. Four further advisories of that release
+concern code that only exists in PHP 8.4/8.5.
 
 **Behaviour changes** introduced by this batch (details in each patch
 header and in `docs/BACKLOG.md`):
@@ -185,6 +185,7 @@ header and in `docs/BACKLOG.md`):
   (`0208`).
 - The FPM full status page escapes request method, URI, query string, user
   and script in html, xml and json (`0212`).
+- `SoapServer::handle()` rejects requests carrying a DOCTYPE (`0215`).
 
 Patches `0113` and `0114` go beyond what upstream shipped for PHP 8.2; they
 are self-contained and can be left out without affecting the rest of the
