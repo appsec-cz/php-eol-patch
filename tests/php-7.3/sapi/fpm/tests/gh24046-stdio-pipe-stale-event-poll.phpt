@@ -1,0 +1,71 @@
+--TEST--
+GH-24046 (FPM: stale stdio event of an exited worker left in the poll event queue)
+--SKIPIF--
+<?php include "skipif.inc"; ?>
+--FILE--
+<?php
+
+require_once "tester.inc";
+
+$cfg = <<<EOT
+[global]
+error_log = {{FILE:LOG}}
+events.mechanism = poll
+[unconfined]
+listen = {{ADDR}}
+pm = static
+pm.max_children = 1
+pm.max_requests = 1
+catch_workers_output = yes
+decorate_workers_output = no
+EOT;
+
+$code = <<<'EOT'
+<?php
+/* dup() of the worker's stderr pipe that is inherited by the background process */
+$stderr = fopen('php://stderr', 'a');
+if (@fwrite($stderr, "log line\n") === false) {
+    echo "write to stderr failed";
+    exit;
+}
+if (isset($_GET['bg'])) {
+    exec('sleep 3 > /dev/null 2>&1 &');
+}
+echo "ok";
+EOT;
+
+/* PHP 7.x specific variant: with events.mechanism = poll the backend walks the
+ * fd event queue on every wakeup, so the stdio event left there by
+ * fpm_child_close() for the exited worker is dereferenced after the worker
+ * structure was freed (ASAN heap-use-after-free in fpm_event_poll_wait()), and
+ * its poll slot is never released ("poll: not enought space to add event"). */
+$tester = new FPM\Tester($cfg, $code);
+$tester->start();
+$tester->expectLogStartNotices();
+/* The worker exits after this request while the background process still holds
+ * its stderr pipe open. The replacement worker gets the same pipe fd numbers. */
+$tester->request('bg=1')->expectBody('ok');
+/* Wait for the exited worker to be buried. */
+usleep(1500000);
+$tester->request()->expectBody('ok');
+$tester->terminate();
+/* PHP 7.x tester.inc has no expectNoLogPattern(): scan the rest of the log. */
+foreach ($tester->getLogLines(-1) as $line) {
+    if (preg_match('/unable to (remove|read)|not enought? space|AddressSanitizer/', $line)) {
+        echo "Unexpected log line: ", $line;
+    }
+}
+$tester->close();
+/* The background process inherited the listening socket: let it exit so that
+ * the port is free for the next test. */
+sleep(2);
+
+?>
+Done
+--EXPECT--
+Done
+--CLEAN--
+<?php
+require_once "tester.inc";
+FPM\Tester::clean();
+?>
