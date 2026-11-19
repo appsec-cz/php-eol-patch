@@ -71,11 +71,13 @@ patch -p1 < /path/to/patches/php-7.3/0002-CVE-2023-0662-max-multipart-body-parts
   `Hard memory limit of N bytes exhausted …` to stderr and force-exits the
   worker with `_exit(137)` — corruption is impossible, but the request (and
   worker process) is deliberately sacrificed. php-fpm respawns the worker.
-- **Session upload progress stays enabled and functional**, but progress
+- **Session upload progress stays functional when it is enabled**: progress
   updates serialize with `incomplete_classes_only`, reject the reserved
   `__PHP_Incomplete_Class` bookkeeping property names, and never run user
   code; a `$_SESSION` materialized mid-parse is removed again at
-  `MULTIPART_EVENT_END`.
+  `MULTIPART_EVENT_END`. Since patch `0110` (CVE-2026-115560, 2026-11-19)
+  the feature is **off by default**, as in upstream PHP 8.2.36+; see
+  "Behaviour changes" below before enabling it.
 - **Multipart parser** keeps only `Content-Disposition` / `Content-Type`
   headers, drops duplicates, and checks the delayed-OOM flag at every
   state-mutating step.
@@ -140,6 +142,54 @@ info leaks / DoS) under **both** `patches/php-7.3/` and `patches/php-7.4/`,
 with identical numbers for identical CVEs. See `docs/BACKLOG.md` for the full
 list, per-CVE upstream commit references and current status.
 
+### 2026-11-19 batch (PHP 8.2.36 / 8.3.37 / 8.4.28 / 8.5.13 / 8.6.0)
+
+The security fixes released by the PHP project on 2026-11-19 are covered by
+patches `0107`-`0114` and `0208`-`0214` for both versions:
+
+| Patch | CVE | What |
+|---|---|---|
+| `0107` | CVE-2026-126714 | session files: always truncate before writing |
+| `0108` | CVE-2026-129496 | error-log timestamp must not use ext/date request state outside a request |
+| `0109` | CVE-2026-129289 | FPM/FastCGI: drain unread request bodies, refuse half-read STDIN records |
+| `0110` | CVE-2026-115560 | `session.upload_progress.enabled` off by default, session INI frozen while it is on |
+| `0111` | CVE-2026-129291 | FPM master: remove the stdio pipe event before closing the fd |
+| `0113` | CVE-2026-129481 | do not continue after an interrupted request shutdown (hardening) |
+| `0114` | CVE-2026-129474 | backtrace args of `__call`/`__callStatic` frames (hardening, upstream 8.5+ only) |
+| `0208` | CVE-2026-128090 | phar: refuse keyless signature when a `.pubkey` exists |
+| `0209` | CVE-2026-15353 | SOAP: empty `arraySize` out-of-bounds access |
+| `0210` | CVE-2026-128064 | mixed-case `HTTPS://` / `FTPS://` no longer fetched in plaintext |
+| `0212` | CVE-2026-129292 + CVE-2026-6735 | FPM status page: escape request fields in html/xml/json |
+| `0213` | CVE-2026-129538 | php-cgi: PATH_INFO pointer underflow |
+| `0214` | CVE-2026-103111 (+ further PCRE2 advisories) | bundled PCRE2 maintenance fixes |
+
+CVE-2026-127960 (folded HTTP headers DoS) does not affect 7.3/7.4 and has no
+patch; number `0211` is unused. The backport for CVE-2026-129506 (ext/soap)
+is still in progress and not part of the series yet. Four further
+advisories of that release concern code that only exists in PHP 8.4/8.5.
+
+**Behaviour changes** introduced by this batch (details in each patch
+header and in `docs/BACKLOG.md`):
+
+- `session.upload_progress.enabled` defaults to Off. If you enable it
+  explicitly, every runtime change of a `session.*` setting throws an
+  `Error` - check php.ini, pool files, `PHP_VALUE`, `.user.ini` and
+  `.htaccess` for an explicit `On` before deploying (`0110`).
+- With `error_log` set to a file, lines logged outside an active request
+  (startup, request startup warnings such as "Input variables exceeded",
+  late shutdown) are stamped in UTC (`0108`).
+- A request whose shutdown is interrupted inside a module's RSHUTDOWN ends
+  the process with status 1; php-fpm respawns the worker and that request
+  gets no (or a truncated) response (`0113`).
+- A phar with a `<archive>.pubkey` next to it must be OpenSSL-signed
+  (`0208`).
+- The FPM full status page escapes request method, URI, query string, user
+  and script in html, xml and json (`0212`).
+
+Patches `0113` and `0114` go beyond what upstream shipped for PHP 8.2; they
+are self-contained and can be left out without affecting the rest of the
+series. Patch `0214` only matters for builds that use the bundled PCRE2.
+
 7.4 specifics of the extended series:
 
 - `0104` (CVE-2022-31626, mysqlnd) and `0106` (CVE-2022-31625, pgsql) are
@@ -189,6 +239,13 @@ officially patched PHP 8.4.27 server. Trust the behavioral OOM tests above.
   regression in request handling.
 - Only the exact tarballs named above are verified. Other 7.3.x/7.4.x
   releases may need fuzz.
+- The 2026-11-19 batch was built and tested on **linux/arm64** (Rocky
+  Linux 8, gcc 8, OpenSSL 1.1.1). Architecture-specific code - notably the
+  PCRE2 JIT touched by `0214` - was not executed on x86_64 as part of that
+  verification.
+- `0109` (CVE-2026-129289) ships without a regression test for the request
+  sequence itself; it is the unmodified upstream change and was verified by
+  regression sweeps and functional checks of ordinary requests.
 
 ## Attribution & license
 
