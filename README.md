@@ -91,6 +91,8 @@ request shutdown, FPM status output, and PHAR signature handling.
 
 ## Documentation and license
 
+- [Technical analyses by CVE](docs/BACKLOG.md#technical-analyses) describe the affected code,
+  the branch-specific backports, and the verification for each advisory.
 - [Backlog and verification](docs/BACKLOG.md) lists per-version coverage,
   upstream fixes, known limitations, and pending work.
 - [Request bailout and memory-limit analysis](docs/CVE-2026-109618-109619-analysis.md)

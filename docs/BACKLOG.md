@@ -4,6 +4,59 @@ The original inventory dates to 2026-10-21 and used the vanilla PHP 7.3.33
 tree. Patch numbers start at `0101` for Tier 1 and `0201` for Tier 2.
 The original tables use ☐ for open, ◐ for in progress, and ☑ for shipped.
 
+## Technical analyses
+
+- [Full request-bailout and memory-limit design](CVE-2026-109618-109619-analysis.md)
+
+| Advisory | Patch | Component and issue |
+| --- | --- | --- |
+| [CVE-2026-109618](CVE-2026-109618-analysis.md) | `0001` | Allocator bailout during request parsing |
+| [CVE-2026-109619](CVE-2026-109619-analysis.md) | `0001` | Request-owned state surviving worker reuse |
+| [CVE-2023-0662](CVE-2023-0662-analysis.md) | `0002` | Multipart part accounting |
+| [CVE-2026-91768](CVE-2026-91768-analysis.md) | `0101` | Exact IPv6 FastCGI allowlist matching |
+| [CVE-2026-6722](CVE-2026-6722-analysis.md) | `0102` | SOAP decoded reference ownership |
+| [CVE-2022-31626](CVE-2022-31626-analysis.md) | `0104` | mysqlnd change-auth response allocation |
+| [CVE-2023-3824](CVE-2023-3824-analysis.md) | `0105` | PHAR directory entry bounds |
+| [CVE-2022-31625](CVE-2022-31625-analysis.md) | `0106` | PostgreSQL partial parameter cleanup |
+| [CVE-2026-126714](CVE-2026-126714-analysis.md) | `0107` | Interrupted writes to files-backed sessions |
+| [CVE-2026-129496](CVE-2026-129496-analysis.md) | `0108` | Error-log timestamps outside a request |
+| [CVE-2026-129289](CVE-2026-129289-analysis.md) | `0109` | FastCGI request boundary on connection reuse |
+| [CVE-2026-115560](CVE-2026-115560-analysis.md) | `0110` | Session serializer consistency across request startup |
+| [CVE-2026-129291](CVE-2026-129291-analysis.md) | `0111` | FPM child pipe event lifetime |
+| [CVE-2026-129481](CVE-2026-129481-analysis.md) | `0113` | Interrupted module shutdown hardening |
+| [CVE-2026-129474](CVE-2026-129474-analysis.md) | `0114` | Argument layout in magic-method backtraces |
+| [CVE-2022-31629](CVE-2022-31629-analysis.md) | `0201` | Protected prefixes during cookie key normalization |
+| [CVE-2024-2756](CVE-2024-2756-analysis.md) | `0201` | Protected cookie prefixes at insertion |
+| [CVE-2024-5458](CVE-2024-5458-analysis.md) | `0202` | IPv6 host validation and URL user information |
+| [CVE-2023-0567](CVE-2023-0567-analysis.md) | `0203` | bcrypt salt alphabet validation |
+| [CVE-2024-3096](CVE-2024-3096-analysis.md) | `0203` | Binary input to bcrypt hashing |
+| [CVE-2024-8929](CVE-2024-8929-analysis.md) | `0204` | mysqlnd result and row decode bounds |
+| [CVE-2025-14181](CVE-2025-14181-analysis.md) | `0205` | SOAP HTTP response buffer growth |
+| [CVE-2026-91765](CVE-2026-91765-analysis.md) | `0206` | Limits on SOAP XML and reference traversal |
+| [CVE-2024-8925](CVE-2024-8925-analysis.md) | `0207` | Multipart boundary capacity |
+| [CVE-2026-128090](CVE-2026-128090-analysis.md) | `0208` | PHAR signature policy with a public key |
+| [CVE-2026-15353](CVE-2026-15353-analysis.md) | `0209` | SOAP 1.2 array dimension count |
+| [CVE-2026-128064](CVE-2026-128064-analysis.md) | `0210` | TLS selection for HTTP and FTP stream wrappers |
+| [CVE-2026-129292](CVE-2026-129292-analysis.md) | `0212` | Format-specific encoding of FPM status fields |
+| [CVE-2026-6735](CVE-2026-6735-analysis.md) | `0212` | Escaping request data in FPM status output |
+| [CVE-2026-129538](CVE-2026-129538-analysis.md) | `0213` | CGI PATH_INFO pointer correction |
+| [CVE-2026-103111](CVE-2026-103111-analysis.md) | `0214` | PCRE2 growable JIT stack bounds |
+| [CVE-2026-86145](CVE-2026-86145-analysis.md) | `0214` | PCRE2 cached DFA workspace capacity |
+| [CVE-2026-89156](CVE-2026-89156-analysis.md) | `0214` | PCRE2 UTF validation after JIT fallback |
+| [CVE-2026-89157](CVE-2026-89157-analysis.md) | `0214` | PCRE2 code-unit allocation sizing |
+| [CVE-2026-89158](CVE-2026-89158-analysis.md) | `0214` | PCRE2 compiler length accounting |
+| [GHSA-43gg-c3xx-7w7g](GHSA-43gg-c3xx-7w7g-analysis.md) | `0214` | PCRE2 legacy arm64 SIMD subject reads |
+| [CVE-2026-129506](CVE-2026-129506-analysis.md) | `0215` | SOAP DTD lifetime and element lookups |
+| [CVE-2026-17543](CVE-2026-17543-analysis.md) | `0216` | PostgreSQL escaped value literal syntax |
+| [CVE-2026-7261](CVE-2026-7261-analysis.md) | `0217` | SOAP session-persisted service object lifetime |
+| [CVE-2026-7262](CVE-2026-7262-analysis.md) | `0218` | SOAP Apache Map value-node validation |
+| [CVE-2026-91769](CVE-2026-91769-analysis.md) | `0219` | TLS SAN precedence over the Common Name |
+| [CVE-2026-91767](CVE-2026-91767-analysis.md) | `0220` | TLS wildcard prefix and suffix bounds |
+| [CVE-2026-91766](CVE-2026-91766-analysis.md) | `0221` | HTTP redirect credential scope |
+| [CVE-2026-6103](CVE-2026-6103-analysis.md) | `0222` | PHAR TAR entry size and block alignment |
+| [CVE-2025-1218](CVE-2025-1218-analysis.md) | `0223` | mysqlnd length fields and packet readers |
+| [CVE-2026-7568](CVE-2026-7568-analysis.md) | `0224` | metaphone index width |
+
 ## Coverage review (2026-11-22)
 
 The five [2026-11-19 release changelogs](https://www.php.net/ChangeLog-8.php#8.6.0)
