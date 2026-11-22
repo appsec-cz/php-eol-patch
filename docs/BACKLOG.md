@@ -1,8 +1,62 @@
 # Backport backlog for PHP 7.3.33 / 7.4.33
 
-Research date: 2026-10-21. Presence of vulnerable code verified against the
-vanilla `php-7.3.33` tree. Numbering scheme: Tier 1 → `0101+`,
-Tier 2 → `0201+`, Tier 3 → `0301+`. Status: ☐ open / ◐ in progress / ☑ done.
+The original inventory dates to 2026-10-21 and used the vanilla PHP 7.3.33
+tree. Patch numbers start at `0101` for Tier 1 and `0201` for Tier 2.
+The original tables use ☐ for open, ◐ for in progress, and ☑ for shipped.
+
+## Coverage review (2026-11-22)
+
+The five [2026-11-19 release changelogs](https://www.php.net/ChangeLog-8.php#8.6.0)
+name 18 distinct CVEs. For each PHP 7 branch, 11 map to shipped fixes, two
+map to related hardening (`0113` and `0114`), and five concern code absent
+from those branches. See the [November batch](#november-2026-security-batch)
+for the mapping, bundled PCRE2 scope, and known test gaps. The October
+[CVE-2026-109618 and CVE-2026-109619 release](https://www.php.net/ChangeLog-8.php#8.2.35)
+maps to `0001` in both branches.
+
+The full series, including the nine follow-up patches below, was reapplied
+in numeric order to [official source archives](https://www.php.net/releases/)
+with verified SHA-256 hashes. All 37 patches for 7.3.33 and all 34 for
+7.4.33 applied without fuzz or rejects. Five existing 7.3 patches applied
+with line offsets. Each follow-up patch applied at its recorded line numbers.
+Both full series built on Rocky Linux 8 arm64 with SOAP, OpenSSL, mysqlnd,
+and PostgreSQL support enabled.
+
+Four compatibility PHPTs passed on each build (TLS common-name fallback
+without SAN, consecutive TAR entries, HTTP redirect header handling, and
+`metaphone()`). Database-backed regressions and the full PHPT suite were
+outside this run.
+
+### Follow-up backports for both branches
+
+These fixes appear in the [PHP 8.2.31–8.2.34 changelogs](https://www.php.net/ChangeLog-8.php#8.2.34).
+The review found the affected code in both trees after applying the
+previous series. The follow-up patches below apply after `0215`.
+
+| Patch (both) | Fix | Upstream release | Affected area |
+|---|---|---|---|
+| `0216` | [CVE-2026-17543](https://github.com/php/php-src/security/advisories/GHSA-7qpv-r5mr-78m4) | 8.2.33 | SQL injection in the PostgreSQL conversion helpers |
+| `0217` | [CVE-2026-7261](https://github.com/php/php-src/security/advisories/GHSA-m33r-qmcv-p97q) | 8.2.31 | SOAP session-persisted object lifetime |
+| `0218` | [CVE-2026-7262](https://github.com/php/php-src/security/advisories/GHSA-hmxp-6pc4-f3vv) | 8.2.31 | SOAP Apache Map value validation |
+| `0219` | [CVE-2026-91769](https://github.com/php/php-src/security/advisories/GHSA-vvx9-73fr-5jjx) | 8.2.34 | TLS hostname verification after a SAN mismatch |
+| `0220` | [CVE-2026-91767](https://github.com/php/php-src/security/advisories/GHSA-xr7j-rvgx-xq5p) | 8.2.34 | OpenSSL wildcard hostname matching |
+| `0221` | [CVE-2026-91766](https://github.com/php/php-src/security/advisories/GHSA-fpwc-w8rq-cr92) | 8.2.34 | HTTP stream credentials on cross-origin redirects |
+| `0222` | [CVE-2026-6103](https://github.com/php/php-src/security/advisories/GHSA-j3wh-g957-2m85) | 8.2.34 | Phar TAR size parsing |
+| `0223` | [CVE-2025-1218](https://github.com/php/php-src/security/advisories/GHSA-r6x9-5r99-36j7) | 8.2.34 | mysqlnd packet bounds checks |
+| `0224` | [CVE-2026-7568](https://github.com/php/php-src/security/advisories/GHSA-96wq-48vp-hh57) | 8.2.31 | Signed index in `metaphone()` |
+
+Patch headers record the php-src commits and version-specific EOL
+references. The HTTP wrapper retains PHP 7.x redirect handling and
+limits credential forwarding to the original origin. The mysqlnd patch
+combines the EOL packet bounds changes and follow-up checks with the
+existing `0204` row decoding guards.
+
+Other entries in those releases still need a per-branch applicability
+review, including CVE-2026-7258, CVE-2026-92842, CVE-2026-7260,
+CVE-2026-9672, and CVE-2026-14355. CVE-2026-17545 concerns
+[Windows-specific file I/O](https://github.com/php/php-src/security/advisories/GHSA-9f67-6fw4-hpfp).
+Earlier release history, external libraries, and other deployment profiles
+can have additional gaps.
 
 ## Tier 1 — pre-auth RCE / memory corruption
 
@@ -27,14 +81,17 @@ Tier 2 → `0201+`, Tier 3 → `0301+`. Status: ☐ open / ◐ in progress / ☑
 | 0206 | CVE-2026-91765 | ext/soap | `cleanup_xml_node` unbounded recursion → pre-auth SoapServer crash, single request | `3655b79c7bfa` | ☑ (0206) |
 | 0207 | CVE-2024-8925 | main/rfc1867.c | `php_ap_memstr` boundary misparsing loses uploaded data | `d65a1e6f9171` (merge after 0001/0002) | ☑ (0207) |
 
-## Tier 3 — trivial, cheap (not yet scheduled)
+## Tier 3 — open historical candidates
 
-CVE-2026-7258 (urldecode OOB),
-CVE-2024-11233 (qprint filter OOB), CVE-2026-92842 (filter NUL),
+CVE-2026-7258 (ctype input handling),
+CVE-2024-11233 (qprint filter OOB), CVE-2026-92842 (convert.* stream filters),
 CVE-2022-31630 (imageloadfont OOB), CVE-2022-37454 (SHA3 overflow),
-CVE-2023-0568 (virtual cwd off-by-one), CVE-2026-91767 (openssl wildcard CN),
+CVE-2023-0568 (virtual cwd off-by-one),
 CVE-2025-1220 (fsockopen/dns NUL byte), CVE-2022-31628 (phar gzip quine DoS,
 requires regression fix `432bf196d5` as well).
+
+The original PHP 7.3.33 candidates CVE-2022-31630 and CVE-2022-37454
+were fixed upstream in [PHP 7.4.33](https://www.php.net/ChangeLog-7.php#7.4.33).
 
 CVE-2026-6735 (FPM status XSS) was closed on 2026-11-19 together with
 CVE-2026-129292 by patch `0212` (see below).
@@ -83,13 +140,13 @@ patched build PASS / vanilla build FAIL (or ASAN/UBSAN demonstration) on
 the CVE regression tests, plus a per-extension regression sweep with no
 patched-only failures.
 
-## 2026-11-19 release batch (PHP 8.2.36 / 8.3.37 / 8.4.28 / 8.5.13 / 8.6.0)
+## November 2026 security batch
 
-Research and backport date: 2026-11-19. Every patch below ships for **both**
-7.3.33 and 7.4.33 under the same number. Each one was produced against the
-tree with the whole earlier series applied, reviewed by an independent
-second pass, and then verified as part of the complete series (see "Whole-
-series verification" at the end of this section).
+Upstream released PHP 8.2.36, 8.3.37, 8.4.28, 8.5.13 and 8.6.0 on
+2026-11-19. The shipped patches in this batch use the same numbers for
+7.3.33 and 7.4.33. `0211` is unused and the SOAP fix originally tracked as
+`0112` ships as `0215`, after its dependency `0206`.
+See the whole-series verification below for the build and test record.
 
 ### Tier 1 — remote code execution / memory corruption
 

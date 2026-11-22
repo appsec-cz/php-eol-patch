@@ -1,16 +1,17 @@
 # php-eol-patch
 
-Security patch backports for **end-of-life PHP versions** (7.3, 7.4) that are
-still exposed to the internet — for example bundled inside products that pin a
-specific PHP version (such as IceWarp Server, which ships PHP 7.3 FPM).
+Unofficial security backports for **PHP 7.3.33 and 7.4.33**, for deployments
+that still depend on these end-of-life releases. Both series include
+CVE-2026-109618 and CVE-2026-109619, the applicable fixes from the
+2026-11-19 PHP security releases, and selected earlier fixes.
 
-These patches are for defenders who **cannot upgrade PHP** but must close
-remotely exploitable holes. Every patch is verified to apply against the
-official vanilla tarballs from php.net and to compile.
-
-> **Disclaimer:** This is an unofficial community effort. It is not endorsed
-> by the PHP Group. The only correct fix is upgrading to a supported PHP
-> version; these patches exist for situations where that is not (yet) possible.
+Both branches carry nine follow-up fixes in patches `0216`–`0224`,
+including PostgreSQL SQL injection (CVE-2026-17543), SOAP object lifetime
+(CVE-2026-7261), and TLS hostname verification (CVE-2026-91769). See the
+[coverage review](docs/BACKLOG.md#coverage-review-2026-11-22) for the patch
+mapping, verification results, and remaining coverage gaps.
+Use an [upstream-supported PHP release](https://www.php.net/supported-versions.php)
+where possible.
 
 ## Repository layout
 
@@ -136,16 +137,18 @@ supersedes is kept for reference in
 
 ## More CVEs
 
-Additional backports for internet-facing EOL PHP live in the same numbered
-series (`01xx` = pre-auth RCE / memory corruption, `02xx` = logic bypasses /
-info leaks / DoS) under **both** `patches/php-7.3/` and `patches/php-7.4/`,
-with identical numbers for identical CVEs. See `docs/BACKLOG.md` for the full
-list, per-CVE upstream commit references and current status.
+The numbered series under `patches/php-7.3/` and `patches/php-7.4/` use
+`01xx` for the higher-priority series and `02xx` for the second tier.
+Apply the files present for your version in ascending numeric order. See
+[the backlog](docs/BACKLOG.md) for upstream references and per-version status.
 
 ### 2026-11-19 batch (PHP 8.2.36 / 8.3.37 / 8.4.28 / 8.5.13 / 8.6.0)
 
-The security fixes released by the PHP project on 2026-11-19 are covered by
-patches `0107`-`0114` and `0208`-`0215` for both versions:
+Both versions carry patches for 11 of the 18 distinct CVEs named in the
+[2026-11-19 upstream changelogs](https://www.php.net/ChangeLog-8.php#8.2.36)
+and related hardening for two more. The patch collection also includes a
+bundled PCRE2 update and incorporates the earlier FPM status fix
+CVE-2026-6735 into `0212`.
 
 | Patch | CVE | What |
 |---|---|---|
@@ -164,9 +167,9 @@ patches `0107`-`0114` and `0208`-`0215` for both versions:
 | `0214` | CVE-2026-103111 (+ further PCRE2 advisories) | bundled PCRE2 maintenance fixes |
 | `0215` | CVE-2026-129506 | SOAP: keep the DTD node alive, never match it as an element (numbered `0215` because it must apply after `0206`) |
 
-CVE-2026-127960 (folded HTTP headers DoS) does not affect 7.3/7.4 and has no
-patch; number `0211` is unused. Four further advisories of that release
-concern code that only exists in PHP 8.4/8.5.
+Five of the 18 CVEs concern code absent from both branches. This includes
+CVE-2026-127960 (folded HTTP headers DoS), for which number `0211` is unused.
+The other four CVE IDs concern PHP 8.4+ or 8.5+ code.
 
 **Behaviour changes** introduced by this batch (details in each patch
 header and in `docs/BACKLOG.md`):
@@ -228,18 +231,17 @@ officially patched PHP 8.4.27 server. Trust the behavioral OOM tests above.
 
 ## Known limitations
 
-- 7.3 and 7.4 lack the fallible-allocator API audit that upstream did across
-  the engine; under extreme OOM pressure a patched build can still die with
-  `SIGSEGV` instead of a clean fatal error (availability impact only,
-  no corruption).
+- Both branches lack upstream's engine-wide fallible-allocator audit. Under
+  extreme memory pressure a patched build can still terminate with
+  `SIGSEGV`.
 - The `0001` hard limit changes the observable behavior of two upstream
   tests (`ext/standard/tests/streams/bug61115-1.phpt`,
   `ext/standard/tests/strings/wordwrap_memory_limit.phpt`): instead of a
   catchable `Allowed memory size …` fatal the worker is hard-killed once the
   hard limit trips. This is the deliberate fail-fast design, not a
   regression in request handling.
-- Only the exact tarballs named above are verified. Other 7.3.x/7.4.x
-  releases may need fuzz.
+- Patch application was verified against the official 7.3.33 and 7.4.33
+  tarballs. Other patch releases are outside that verification.
 - The 2026-11-19 batch was built and tested on **linux/arm64** (Rocky
   Linux 8, gcc 8, OpenSSL 1.1.1). Architecture-specific code - notably the
   PCRE2 JIT touched by `0214` - was not executed on x86_64 as part of that
