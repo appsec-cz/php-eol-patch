@@ -1,266 +1,102 @@
-# php-eol-patch
+# PHP EOL security backports
 
-Unofficial security backports for **PHP 7.3.33 and 7.4.33**, for deployments
-that still depend on these end-of-life releases. Both series include
-CVE-2026-109618 and CVE-2026-109619, the applicable fixes from the
-2026-11-19 PHP security releases, and selected earlier fixes.
+This project provides complete, version-specific source patch series for
+**PHP 7.3.33** and **PHP 7.4.33**. The series backport selected upstream
+security fixes and hardening for deployments that still depend on these
+end-of-life releases.
 
-Both branches carry nine follow-up fixes in patches `0216`–`0224`,
-including PostgreSQL SQL injection (CVE-2026-17543), SOAP object lifetime
-(CVE-2026-7261), and TLS hostname verification (CVE-2026-91769). See the
-[coverage review](docs/BACKLOG.md#coverage-review-2026-11-22) for the patch
-mapping, verification results, and remaining coverage gaps.
-Use an [upstream-supported PHP release](https://www.php.net/supported-versions.php)
-where possible.
+Coverage spans the PHP runtime and request lifecycle, FPM and CGI, sessions,
+HTTP and TLS, SOAP and XML, PHAR, database drivers, and bundled PCRE2.
+See the [coverage review and patch inventory](docs/BACKLOG.md#coverage-review-2026-11-22)
+for included advisories, upstream references, and open gaps.
 
-## Repository layout
+## Choose a patch series
 
-```
-patches/
-  php-7.3/          patch series for PHP 7.3.33 (apply in numeric order)
-  php-7.4/          patch series for PHP 7.4.33
-tests/              regression tests (.phpt) adapted for EOL versions
-docs/               per-CVE analysis, patch-comparison notes, backlog
-```
+| Official source release | Patch series | PHPT tests and fixtures |
+| --- | --- | --- |
+| PHP 7.3.33 | [37 patches](patches/php-7.3/) | [PHP 7.3 tests](tests/php-7.3/) |
+| PHP 7.4.33 | [34 patches](patches/php-7.4/) | [PHP 7.4 tests](tests/php-7.4/) |
 
-## CVE-2026-109618 & CVE-2026-109619 ("state corruption via bailout")
+Each directory contains the full series for its source release. Apply every
+patch in ascending filename order. Numbering gaps reflect version differences,
+fixes already present in upstream sources, or earlier changes incorporated into
+another patch.
 
-Disclosed 2026-10-21. Unauthenticated remote code execution affecting all PHP
-versions prior to 8.2.35 / 8.3.27 / 8.4.27 / 8.5.x:
+## Apply and build
 
-- **CVE-2026-109618** (GHSA-w8hw-w9fx-j79w): when a memory-limit bailout fires
-  in the middle of `multipart/form-data` request parsing (`rfc1867`), partially
-  initialized structures survive and the engine continues with corrupted state.
-- **CVE-2026-109619** (GHSA-6wmf-4rv5-p3rp): stale global state from an aborted
-  request (session status, SAPI auth pointers, `PG(modules_activated)`, …)
-  leaks into subsequent requests handled by the same PHP-FPM worker, enabling
-  session fixation / attacker-controlled `$_SESSION` deserialization.
-
-Both are reachable **pre-auth** through any PHP endpoint that accepts POST,
-which includes every IceWarp web-facing PHP script.
-
-## PHP 7.3.33 — the patch
-
-`patches/php-7.3/0001-CVE-2026-109618-109619-avoid-state-corruption.patch`
-
-This is a **full backport of the upstream 8.2.35 fix** (commit `01a40e89fbfc`,
-"Avoid state corruption via bailout") to PHP 7.3.33, extended with the
-additional hardening that the official EOL minimal mitigation carries
-(CONCAT/FAST_CONCAT integer-overflow checks in the VM, `HT_HASH_RESET`
-small-table fix, `zend_llist_destroy()` NULLing, executor/SAPI stale-state
-resets, `ZSTR_MAX_LEN` compat). One self-contained patch, applied on top of
-the vanilla tarball:
+Download the exact [official PHP source archive](https://www.php.net/releases/)
+and verify its published SHA-256 checksum. Run the following from the repository
+checkout with GNU patch. For PHP 7.4, set `php_series=7.4` and use the matching
+archive path.
 
 ```sh
-tar -xzf php-7.3.33.tar.gz
-cd php-7.3.33
-patch -p1 < /path/to/patches/php-7.3/0001-CVE-2026-109618-109619-avoid-state-corruption.patch
-patch -p1 < /path/to/patches/php-7.3/0002-CVE-2023-0662-max-multipart-body-parts.patch
-# then configure && make as usual
+repo_dir=$(pwd -P)
+php_series=7.3
+php_version="$php_series.33"
+source_archive="/path/to/php-$php_version.tar.gz"
+build_dir=$(mktemp -d)
+src_dir="$build_dir/php-$php_version"
+export LC_ALL=C
+
+(
+    set -eu
+    tar -xf "$source_archive" -C "$build_dir"
+    cd "$src_dir"
+    for patch_file in "$repo_dir/patches/php-$php_series/"*.patch; do
+        printf '%s\n' "Applying ${patch_file##*/}"
+        patch --dry-run -f -F 0 -p1 < "$patch_file"
+        patch -f -F 0 -p1 < "$patch_file"
+    done
+)
 ```
 
-### How the full backport behaves
-
-- **Soft memory-limit breach** (e.g. `memory_limit` hit during request
-  parsing): the OOM is recorded as *delayed OOM*, parsing unwinds in an
-  orderly way, and a normal `Fatal error: Allowed memory size of N bytes
-  exhausted … in Unknown on line 0` is raised at a safe point. **The FPM
-  worker survives** and can serve the next request.
-- **Hard limit breach**: the hard limit is computed as `2 × memory_limit`
-  for limits below 1 GiB, `memory_limit + 1 GiB` for larger limits (capped
-  at `SIZE_MAX >> 1`, never below current usage). Crossing it prints
-  `Hard memory limit of N bytes exhausted …` to stderr and force-exits the
-  worker with `_exit(137)` — corruption is impossible, but the request (and
-  worker process) is deliberately sacrificed. php-fpm respawns the worker.
-- **Session upload progress stays functional when it is enabled**: progress
-  updates serialize with `incomplete_classes_only`, reject the reserved
-  `__PHP_Incomplete_Class` bookkeeping property names, and never run user
-  code; a `$_SESSION` materialized mid-parse is removed again at
-  `MULTIPART_EVENT_END`. Since patch `0110` (CVE-2026-115560, 2026-11-19)
-  the feature is **off by default**, as in upstream PHP 8.2.36+; see
-  "Behaviour changes" below before enabling it.
-- **Multipart parser** keeps only `Content-Disposition` / `Content-Type`
-  headers, drops duplicates, and checks the delayed-OOM flag at every
-  state-mutating step.
-- **Cross-request hygiene**: freed SAPI pointers (`auth_user`, …) are NULLed,
-  `PG(http_globals)[i]` are UNDEFed at shutdown, `PG(modules_activated)` is
-  cleared, and executor error/exception handler state and object-store
-  pointers are reset — nothing stale can leak into the next request.
-
-`0002-CVE-2023-0662-max-multipart-body-parts.patch` adds the
-`max_multipart_body_parts` INI setting (default `-1` = `max_input_vars` +
-`max_file_uploads`) and closes the related multipart body-part DoS
-(CVE-2023-0662). It applies on top of `0001` (or on vanilla — it is
-independent).
-
-### Why not the official EOL minimal mitigation?
-
-The PHP Security Team also ships a *minimal mitigation* for EOL branches
-(php-src `PHP-7.4-CVE-2026-109618-109619`, Ondřej Surý's php7.3 package,
-Ubuntu ESM USN-8948-2). It takes a different route: every allocation-overflow
-path prints a fatal and immediately `_exit(1)`s (worker dies on any overflow),
-and the rfc1867 session upload-progress feature is **hard-disabled** in the
-C code regardless of `php.ini`. We ship the full backport instead because it
-preserves the feature and lets workers survive handled soft-OOMs — while now
-*including* every extra hardening item the minimal patch had (verified by
-side-by-side source comparison; see
-`docs/CVE-2026-109618-109619-analysis.md`). Note the official 7.3 minimal
-patch also does not compile on the vanilla tarball without a `ZSTR_MAX_LEN`
-shim and omits `max_multipart_body_parts` — both are handled here.
-
-## PHP 7.4.33 — the patch
-
-`patches/php-7.4/0001-CVE-2026-109618-109619-avoid-state-corruption.patch`
-
-The **same full backport** as the 7.3 `0001`, adapted to the vanilla PHP
-7.4.33 tarball: upstream 8.2.35 semantics (delayed OOM, hard limit,
-feature-preserving session hardening, cross-request hygiene) plus every
-hardening item from the official EOL minimal mitigation — a superset of both
-approaches. The `max_multipart_body_parts` limit (CVE-2023-0662) is **folded
-into this patch**, so the 7.4 series needs no separate `0002`:
+Review any line offsets against the [verification record](docs/BACKLOG.md#coverage-review-2026-11-22).
+Once the full series applies, build the patched sources with the configure flags
+and dependencies for your deployment. The example enables OpenSSL and PCNTL
+for the compatibility checks below.
 
 ```sh
-tar -xzf php-7.4.33.tar.gz
-cd php-7.4.33
-patch -p1 < /path/to/patches/php-7.4/0001-CVE-2026-109618-109619-avoid-state-corruption.patch
-# then configure && make as usual
+cd "$src_dir"
+./configure --with-openssl --enable-pcntl && make -j4
 ```
 
-7.4-specific notes: `ZSTR_MAX_LEN` already exists (no compat shim needed),
-the `_SESSION` key is created without `ZSTR_INIT_LITERAL` (that macro is
-8.0+), and the hardened unserializer path also covers the 7.4
-`__unserialize()` / `__serialize()` mechanism. The behavior table in the 7.3
-section above applies unchanged (soft OOM → clean fatal, worker survives;
-hard limit → `_exit(137)`). The official EOL minimal mitigation commit it
-supersedes is kept for reference in
-`archive/CVE-2026-109618-109619-php-7.4-minimal-mitigation.patch`.
+## Verify before deployment
 
-## More CVEs
-
-The numbered series under `patches/php-7.3/` and `patches/php-7.4/` use
-`01xx` for the higher-priority series and `02xx` for the second tier.
-Apply the files present for your version in ascending numeric order. See
-[the backlog](docs/BACKLOG.md) for upstream references and per-version status.
-
-### 2026-11-19 batch (PHP 8.2.36 / 8.3.37 / 8.4.28 / 8.5.13 / 8.6.0)
-
-Both versions carry patches for 11 of the 18 distinct CVEs named in the
-[2026-11-19 upstream changelogs](https://www.php.net/ChangeLog-8.php#8.2.36)
-and related hardening for two more. The patch collection also includes a
-bundled PCRE2 update and incorporates the earlier FPM status fix
-CVE-2026-6735 into `0212`.
-
-| Patch | CVE | What |
-|---|---|---|
-| `0107` | CVE-2026-126714 | session files: always truncate before writing |
-| `0108` | CVE-2026-129496 | error-log timestamp must not use ext/date request state outside a request |
-| `0109` | CVE-2026-129289 | FPM/FastCGI: drain unread request bodies, refuse half-read STDIN records |
-| `0110` | CVE-2026-115560 | `session.upload_progress.enabled` off by default, session INI frozen while it is on |
-| `0111` | CVE-2026-129291 | FPM master: remove the stdio pipe event before closing the fd |
-| `0113` | CVE-2026-129481 | do not continue after an interrupted request shutdown (hardening) |
-| `0114` | CVE-2026-129474 | backtrace args of `__call`/`__callStatic` frames (hardening, upstream 8.5+ only) |
-| `0208` | CVE-2026-128090 | phar: refuse keyless signature when a `.pubkey` exists |
-| `0209` | CVE-2026-15353 | SOAP: empty `arraySize` out-of-bounds access |
-| `0210` | CVE-2026-128064 | mixed-case `HTTPS://` / `FTPS://` no longer fetched in plaintext |
-| `0212` | CVE-2026-129292 + CVE-2026-6735 | FPM status page: escape request fields in html/xml/json |
-| `0213` | CVE-2026-129538 | php-cgi: PATH_INFO pointer underflow |
-| `0214` | CVE-2026-103111 (+ further PCRE2 advisories) | bundled PCRE2 maintenance fixes |
-| `0215` | CVE-2026-129506 | SOAP: keep the DTD node alive, never match it as an element (numbered `0215` because it must apply after `0206`) |
-
-Five of the 18 CVEs concern code absent from both branches. This includes
-CVE-2026-127960 (folded HTTP headers DoS), for which number `0211` is unused.
-The other four CVE IDs concern PHP 8.4+ or 8.5+ code.
-
-**Behaviour changes** introduced by this batch (details in each patch
-header and in `docs/BACKLOG.md`):
-
-- `session.upload_progress.enabled` defaults to Off. If you enable it
-  explicitly, every runtime change of a `session.*` setting throws an
-  `Error` - check php.ini, pool files, `PHP_VALUE`, `.user.ini` and
-  `.htaccess` for an explicit `On` before deploying (`0110`).
-- With `error_log` set to a file, lines logged outside an active request
-  (startup, request startup warnings such as "Input variables exceeded",
-  late shutdown) are stamped in UTC (`0108`).
-- A request whose shutdown is interrupted inside a module's RSHUTDOWN ends
-  the process with status 1; php-fpm respawns the worker and that request
-  gets no (or a truncated) response (`0113`).
-- A phar with a `<archive>.pubkey` next to it must be OpenSSL-signed
-  (`0208`).
-- The FPM full status page escapes request method, URI, query string, user
-  and script in html, xml and json (`0212`).
-- `SoapServer::handle()` rejects requests carrying a DOCTYPE (`0215`).
-
-Patches `0113` and `0114` go beyond what upstream shipped for PHP 8.2; they
-are self-contained and can be left out without affecting the rest of the
-series. Patch `0214` only matters for builds that use the bundled PCRE2.
-
-7.4 specifics of the extended series:
-
-- `0104` (CVE-2022-31626, mysqlnd) and `0106` (CVE-2022-31625, pgsql) are
-  **not shipped for 7.4** — 7.4.33 already contains those upstream fixes
-  (they landed in 7.4.30, before 7.4 EOL).
-- `0201` for 7.4 covers **only CVE-2024-2756** — 7.4.33 already ships the
-  CVE-2022-31629 part. The patch matches upstream's final state (the early
-  `strncmp` block is removed when the `php_is_forbidden_variable_name()`
-  helper is introduced).
-- CVE-2023-0662 (`max_multipart_body_parts`, the 7.3 series' `0002`) is
-  folded into the 7.4 `0001`, so the 7.4 series has no `0002`.
-
-## Verifying a patched build
-
-Adapted upstream regression tests live in `tests/php-7.3/` and
-`tests/php-7.4/` (source layout preserved). Copy them into the patched
-source tree and run (7.3 shown; substitute `php-7.4` paths for 7.4):
+Copy the matching PHPT tests and fixtures into the patched tree. Use the PHP
+binary you built to run tests for the extensions and SAPIs you deploy. This
+example runs the four compatibility checks used in the coverage review.
+The checks use OpenSSL, PHAR, PCNTL, POSIX, `proc_open()`, and local
+loopback connections.
 
 ```sh
-cp -r tests/php-7.3/tests/basic/oom_rfc1867* php-7.3.33/tests/basic/
-cp tests/php-7.3/ext/session/tests/rfc1867_*.phpt php-7.3.33/ext/session/tests/
-cd php-7.3.33
-sapi/cli/php run-tests.php -q tests/basic/oom_rfc1867_*.phpt ext/session/tests/rfc1867_*.phpt
+cd "$src_dir"
+cp -R "$repo_dir/tests/php-$php_series/." .
+TEST_PHP_EXECUTABLE="$PWD/sapi/cli/php" \
+    sapi/cli/php run-tests.php -q \
+    ext/openssl/tests/san_absent_cn_fallback.phpt \
+    ext/phar/tests/tar/regular-entry-boundaries.phpt \
+    ext/standard/tests/http/bug61548.phpt \
+    ext/standard/tests/strings/metaphone.phpt
 ```
 
-Expected on a patched build: clean `Fatal error: Allowed memory size …`
-(soft limit) — **no** worker crash, no state leaking into the next request.
-The same tests against an unpatched build demonstrate corruption/crash.
+On 2026-11-22, both complete series applied to clean official sources and
+built on Rocky Linux 8 arm64. All four compatibility tests passed on each
+build. The [verification record](docs/BACKLOG.md#coverage-review-2026-11-22)
+documents the tested configuration, earlier regression runs, and gaps,
+including database-backed regressions for the follow-up batch.
 
-Notes on dynamic "UAF probe" scripts: simple probes that serialize/unserialize
-crafted objects **can report a patched build as vulnerable** — the upstream fix
-deliberately does not change `var_destroy` ordering, so probe results are not a
-reliable patch indicator. We confirmed this false positive against an
-officially patched PHP 8.4.27 server. Trust the behavioral OOM tests above.
+Before rollout, review the [runtime and configuration changes](docs/BACKLOG.md#behaviour-changes-operators-must-know-about).
+These include session upload progress defaulting to **Off** and changes to
+request shutdown, FPM status output, and PHAR signature handling.
 
-## Known limitations
+## Documentation and license
 
-- Both branches lack upstream's engine-wide fallible-allocator audit. Under
-  extreme memory pressure a patched build can still terminate with
-  `SIGSEGV`.
-- The `0001` hard limit changes the observable behavior of two upstream
-  tests (`ext/standard/tests/streams/bug61115-1.phpt`,
-  `ext/standard/tests/strings/wordwrap_memory_limit.phpt`): instead of a
-  catchable `Allowed memory size …` fatal the worker is hard-killed once the
-  hard limit trips. This is the deliberate fail-fast design, not a
-  regression in request handling.
-- Patch application was verified against the official 7.3.33 and 7.4.33
-  tarballs. Other patch releases are outside that verification.
-- The 2026-11-19 batch was built and tested on **linux/arm64** (Rocky
-  Linux 8, gcc 8, OpenSSL 1.1.1). Architecture-specific code - notably the
-  PCRE2 JIT touched by `0214` - was not executed on x86_64 as part of that
-  verification.
-- `0109` (CVE-2026-129289) ships without a regression test for the request
-  sequence itself; it is the unmodified upstream change and was verified by
-  regression sweeps and functional checks of ordinary requests.
+- [Backlog and verification](docs/BACKLOG.md) lists per-version coverage,
+  upstream fixes, known limitations, and pending work.
+- [Request bailout and memory-limit analysis](docs/CVE-2026-109618-109619-analysis.md)
+  explains the original runtime backport and its trade-offs.
+- [Archive](archive/) holds historical patch variants.
 
-## Attribution & license
-
-- The 7.3 `0001` patch ports upstream php-src commit `01a40e89fbfc` (PHP
-  Security Team) and incorporates hardening from the official EOL minimal
-  mitigation (Arnaud Le Blanc, co-author Ilija Tovilo) as shipped in Ondřej
-  Surý's php7.3 packaging.
-- The 7.4 `0001` patch ports the same upstream commit `01a40e89fbfc` to
-  7.4.33 and incorporates hardening from the official EOL commit
-  `712e60f9edfd…` (PHP Security Team; the original minimal-mitigation patch
-  is kept in `archive/`).
-- Series `01xx`/`02xx` patches port the upstream commits referenced in each
-  patch header; see `docs/BACKLOG.md`.
-- All patches are derived works of php-src and are distributed under the
-  [PHP License 3.01](https://www.php.net/license/3_01.txt).
+Patch headers record upstream authorship and references where applicable.
+The patches are derived from php-src and distributed under the
+[PHP License 3.01](https://www.php.net/license/3_01.txt).
