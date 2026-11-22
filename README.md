@@ -95,7 +95,6 @@ request shutdown, FPM status output, and PHAR signature handling.
   upstream fixes, known limitations, and pending work.
 - [Request bailout and memory-limit analysis](docs/CVE-2026-109618-109619-analysis.md)
   explains the original runtime backport and its trade-offs.
-- [Archive](archive/) holds historical patch variants.
 
 Patch headers record upstream authorship and references where applicable.
 The patches are derived from php-src and distributed under the
