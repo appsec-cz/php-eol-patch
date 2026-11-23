@@ -89,6 +89,53 @@ Before rollout, review the [runtime and configuration changes](docs/BACKLOG.md#b
 These include session upload progress defaulting to **Off** and changes to
 request shutdown, FPM status output, and PHAR signature handling.
 
+## Build for Windows
+
+[`build.ps1`](build.ps1) builds the patched sources into Windows release
+archives with the same layout and file names as the official
+[windows.php.net](https://windows.php.net/downloads/releases/archives/) builds,
+for example `php-7.4.33-nts-Win32-vc15-x64.zip`. It also produces the debug,
+devel, and test packs. Like the official builds, it uses the MSVC v141 (vc15)
+toolset and the prebuilt vc15 dependency libraries.
+
+```powershell
+# One-time setup: installs Visual Studio 2022 Build Tools with the MSVC v141
+# toolset via winget, or adds the components to an existing Visual Studio 2022.
+# Requires administrator rights.
+.\build-install-deps.ps1
+
+# Build 7.3 and 7.4, NTS and TS, x64. Archives are written to .\dist.
+.\build.ps1
+
+# Or build a subset.
+.\build.ps1 -Version 7.4 -ThreadSafety nts -Arch x64
+```
+
+For each variant, the script:
+
+1. Downloads the official source tarball and verifies its SHA-256 checksum.
+2. Applies the complete patch series without fuzz.
+3. Configures with the official snapshot options and runs `nmake snap`.
+4. Verifies the archive. It checks `php -v`, loads every bundled extension, and
+   runs this repository's PHPT tests against both the patched build and the
+   official unpatched build of the same release.
+
+The PHPT report labels each test as `fix confirmed`, `pass`, `skipped`, or
+`fails on official too`. A test that passes on the official build but fails on
+the patched build makes the script fail. `-VerifyOnly` reruns only the
+verification step for an existing build.
+
+Unlike the official archives, these builds:
+
+- omit `php_oci8_12c.dll` and `php_pdo_oci.dll` because those extensions
+  require the proprietary Oracle Instant Client SDK
+- do not use PGO optimization
+
+Some PHPT tests start helper processes with `proc_open()` or `exec()`, using
+multiple quoted arguments. `cmd.exe` breaks those commands on Windows, so these
+tests fail on both the patched and official builds. They need Linux for full
+coverage. FPM and `pcntl` tests are skipped on Windows.
+
 ## Documentation and license
 
 - [Technical analyses by CVE](docs/BACKLOG.md#technical-analyses) describe the affected code,

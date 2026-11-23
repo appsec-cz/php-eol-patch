@@ -1,0 +1,4 @@
+# Patches and PHPT fixtures must keep their exact bytes (LF line endings),
+# even on Windows checkouts with core.autocrlf=true.
+patches/** -text
+tests/** -text
