@@ -1,0 +1,30 @@
+GH-25588: pdo_sqlite bound parameter lifetime
+
+From: Ilia Alshanetsky <ilia@ilia.ws>
+Upstream: https://github.com/php/php-src/commit/066f18f4f56ab58501b805dfd93f2251079d4fb3
+
+diff --git a/ext/pdo_sqlite/sqlite_statement.c b/ext/pdo_sqlite/sqlite_statement.c
+index 2ef6c2a..453af7f 100644
+--- a/ext/pdo_sqlite/sqlite_statement.c
++++ b/ext/pdo_sqlite/sqlite_statement.c
+@@ -199,9 +199,10 @@ static int pdo_sqlite_stmt_param_hook(pdo_stmt_t *stmt, struct pdo_bound_param_d
+ 						if (SQLITE_OK == sqlite3_bind_blob(S->stmt, param->paramno + 1,
+ 								Z_STRVAL_P(parameter),
+ 								Z_STRLEN_P(parameter),
+-								SQLITE_STATIC)) {
++								SQLITE_TRANSIENT)) {
+ 							return 1;
+ 						}
++						pdo_sqlite_error_stmt(stmt);
+ 						return 0;
+ 
+ 					case PDO_PARAM_STR:
+@@ -220,7 +221,7 @@ static int pdo_sqlite_stmt_param_hook(pdo_stmt_t *stmt, struct pdo_bound_param_d
+ 							if (SQLITE_OK == sqlite3_bind_text(S->stmt, param->paramno + 1,
+ 									Z_STRVAL_P(parameter),
+ 									Z_STRLEN_P(parameter),
+-									SQLITE_STATIC)) {
++									SQLITE_TRANSIENT)) {
+ 								return 1;
+ 							}
+ 						}

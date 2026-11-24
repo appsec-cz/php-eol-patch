@@ -1,0 +1,20 @@
+GH-25094: soap get_doc_function missing request parts
+
+From: lazerg <lazerg2@gmail.com>
+Upstream: https://github.com/php/php-src/commit/3589066c7c0e0534d87925df3941045578fcaab1
+
+diff --git a/ext/soap/soap.c b/ext/soap/soap.c
+index e92c5b5..e3751ae 100644
+--- a/ext/soap/soap.c
++++ b/ext/soap/soap.c
+@@ -4513,6 +4513,10 @@ static sdlFunctionPtr get_doc_function(sdlPtr sdl, xmlNodePtr params) /* {{{ */
+ 						xmlNodePtr node = params;
+ 
+ 						ZEND_HASH_FOREACH_PTR(tmp->requestParameters, param) {
++							if (node == NULL) {
++								ok = 0;
++								break;
++							}
+ 							if (param->element) {
+ 								if (strcmp(param->element->name, (char*)node->name) != 0) {
+ 									ok = 0;

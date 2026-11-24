@@ -14,8 +14,8 @@ for included advisories, upstream references, and open gaps.
 
 | Official source release | Patch series | PHPT tests and fixtures |
 | --- | --- | --- |
-| PHP 7.3.33 | [37 patches](patches/php-7.3/) | [PHP 7.3 tests](tests/php-7.3/) |
-| PHP 7.4.33 | [34 patches](patches/php-7.4/) | [PHP 7.4 tests](tests/php-7.4/) |
+| PHP 7.3.33 | [40 patches](patches/php-7.3/) | [PHP 7.3 tests](tests/php-7.3/) |
+| PHP 7.4.33 | [37 patches](patches/php-7.4/) | [PHP 7.4 tests](tests/php-7.4/) |
 
 Each directory contains the full series for its source release. Apply every
 patch in ascending filename order. Numbering gaps reflect version differences,
@@ -94,7 +94,8 @@ request shutdown, FPM status output, and PHAR signature handling.
 [`build.ps1`](build.ps1) builds the patched sources into Windows release
 archives with the same layout and file names as the official
 [windows.php.net](https://windows.php.net/downloads/releases/archives/) builds,
-for example `php-7.4.33-nts-Win32-vc15-x64.zip`. It also produces the debug,
+for example `php-7.4.33-nts-Win32-vc15-x64.zip` or the 32-bit
+`php-7.4.33-nts-Win32-vc15-x86.zip`. It also produces the debug,
 devel, and test packs. Like the official builds, it uses the MSVC v141 (vc15)
 toolset and the prebuilt vc15 dependency libraries.
 
@@ -104,7 +105,7 @@ toolset and the prebuilt vc15 dependency libraries.
 # Requires administrator rights.
 .\build-install-deps.ps1
 
-# Build 7.3 and 7.4, NTS and TS, x64. Archives are written to .\dist.
+# Build 7.3 and 7.4, NTS and TS, x64 and x86. Archives are written to .\dist.
 .\build.ps1
 
 # Or build a subset.

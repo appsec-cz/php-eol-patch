@@ -1,0 +1,26 @@
+GH-25089: phar zip alias length from decompressed data
+
+From: lazerg <lazerg2@gmail.com>
+Upstream: https://github.com/php/php-src/commit/61edcf9be7d16a325ff94d714f1208bcb00e90a4
+
+diff --git a/ext/phar/zip.c b/ext/phar/zip.c
+index 4bed35f..66e314f 100644
+--- a/ext/phar/zip.c
++++ b/ext/phar/zip.c
+@@ -571,7 +571,6 @@ foundit:
+ 			fp->readpos = 0;
+ 			/* the above lines should be for php < 5.2.6 after 5.3 filters are fixed */
+ 
+-			mydata->alias_len = entry.uncompressed_filesize;
+ 			if (entry.flags & PHAR_ENT_COMPRESSED_GZ) {
+ 				filter = php_stream_filter_create("zlib.inflate", NULL, php_stream_is_persistent(fp));
+ 
+@@ -656,6 +655,8 @@ foundit:
+ 				}
+ 			}
+ 
++			mydata->alias_len = entry.uncompressed_filesize;
++
+ 			/* return to central directory parsing */
+ 			php_stream_seek(fp, saveloc, SEEK_SET);
+ 		}

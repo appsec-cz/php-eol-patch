@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Builds patched PHP 7.3.33 / 7.4.33 for Windows with every patch in this repository.
 
@@ -35,7 +35,7 @@
     nts, ts or both (default).
 
 .PARAMETER Arch
-    x64 (default), x86 or both.
+    x64, x86 (32-bit) or both (default).
 
 .PARAMETER WorkDir
     Directory for downloads, sources, dependencies and objects. Must not
@@ -56,7 +56,11 @@
     Unpatched baseline binaries can hang on some security tests.
 
 .EXAMPLE
-    .\build.ps1 -Version 7.4 -ThreadSafety nts
+    .\build.ps1
+    Builds all eight variants: 7.3 and 7.4, NTS and TS, x64 and x86.
+
+.EXAMPLE
+    .\build.ps1 -Version 7.4 -ThreadSafety nts -Arch x86
 #>
 [CmdletBinding()]
 param(
@@ -67,7 +71,7 @@ param(
     [string[]]$ThreadSafety = @('nts', 'ts'),
 
     [ValidateSet('x64', 'x86')]
-    [string[]]$Arch = @('x64'),
+    [string[]]$Arch = @('x64', 'x86'),
 
     [string]$WorkDir,
 
@@ -397,9 +401,9 @@ Write-Host "PHP SDK: $sdkRoot"
 
 $summary = @()
 foreach ($series in $Version) {
-    foreach ($arch in $Arch) {
+    foreach ($targetArch in $Arch) {   # not $arch: PowerShell names are case-insensitive
         foreach ($variant in $ThreadSafety) {
-            $name = "php-$series-$variant-$arch"
+            $name = "php-$series-$variant-$targetArch"
             $stamp = Get-Date
             $buildRoot = Join-Path $WorkDir $name
             $sourceDir = Join-Path $buildRoot "php-$($PhpSources[$series].Version)"
@@ -413,7 +417,7 @@ foreach ($series in $Version) {
             $patchCount = Install-Patches $sdkRoot $series $sourceDir
             Write-Host "Applied $patchCount patches."
 
-            $depsDir = Join-Path $WorkDir "deps\$series-$Crt-$arch"
+            $depsDir = Join-Path $WorkDir "deps\$series-$Crt-$targetArch"
             New-Item -ItemType Directory -Force $depsDir | Out-Null
             # configure requires the object directory to exist.
             New-Item -ItemType Directory -Force (Join-Path $buildRoot 'obj') | Out-Null
@@ -432,7 +436,7 @@ foreach ($series in $Version) {
             @(
                 '@echo on',
                 "cd /d `"$sourceDir`" || exit /b 1",
-                "call phpsdk_deps.bat --update --no-backup --branch $series --crt $Crt --arch $arch --deps `"$depsDir`" || exit /b 1",
+                "call phpsdk_deps.bat --update --no-backup --branch $series --crt $Crt --arch $targetArch --deps `"$depsDir`" || exit /b 1",
                 # phpsdk_deps changes the working directory.
                 "cd /d `"$sourceDir`" || exit /b 1",
                 'call .\buildconf.bat --force || exit /b 1',
@@ -441,7 +445,7 @@ foreach ($series in $Version) {
                 'nmake snap || exit /b 1'
             ) | Set-Content -Path $taskFile -Encoding ascii
 
-            $exitCode = Invoke-SdkTask $sdkRoot $arch $taskFile $logFile
+            $exitCode = Invoke-SdkTask $sdkRoot $targetArch $taskFile $logFile
             if ($exitCode -ne 0) { throw "Build of $name failed (exit code $exitCode). See $logFile." }
             }
 
@@ -449,7 +453,7 @@ foreach ($series in $Version) {
             $objDir = Join-Path $buildRoot 'obj'
             $fullVersion = $PhpSources[$series].Version
             $ntsPart = if ($variant -eq 'nts') { '-nts' } else { '' }
-            $mainPattern = "php-$fullVersion$ntsPart-Win32-$Crt-$arch.zip"
+            $mainPattern = "php-$fullVersion$ntsPart-Win32-$Crt-$targetArch.zip"
             $mainZip = Get-ChildItem $objDir -Recurse -Filter '*.zip' |
                 Where-Object { $_.Name -like $mainPattern } | Select-Object -First 1
             if (-not $mainZip) {
@@ -465,7 +469,7 @@ foreach ($series in $Version) {
             $testFailures = @()
             if (-not $SkipTests) {
                 Write-Step "Verifying $($mainZip.Name)"
-                $testFailures = Test-Build $series $variant $arch $sourceDir $outputZip (Join-Path $buildRoot 'verify')
+                $testFailures = Test-Build $series $variant $targetArch $sourceDir $outputZip (Join-Path $buildRoot 'verify')
                 if ($testFailures.Count -gt 0) {
                     $testFailures | ForEach-Object { Write-Host "  FAILED: $_" -ForegroundColor Red }
                 }

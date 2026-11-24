@@ -9,6 +9,9 @@ pcre2test's "expand" modifier repeats "()\g{-1}" 1400 times; str_repeat()
 does the same here. PHP assigns a growable 32K..192K JIT stack, which matches
 the jitstack=192 setting of the upstream test. Upstream's expected result is
 "Failed: error -46: JIT stack limit reached".
+On 32-bit builds the JIT frames are smaller, the match fits into the 192K
+stack and succeeds like the interpreter does. Both outcomes are correct; an
+unpatched build crashes instead.
 --SKIPIF--
 <?php
 if (ini_get("pcre.jit") === FALSE) {
@@ -20,9 +23,13 @@ pcre.jit=1
 --FILE--
 <?php
 $pattern = '/((?(DEFINE)' . str_repeat('()\g{-1}', 1400) . ').{1}(?R)|)/';
-var_dump(preg_match($pattern, 'AAAAAA'));
-var_dump(preg_last_error() === PREG_JIT_STACKLIMIT_ERROR);
+$r = preg_match($pattern, 'AAAAAA');
+$e = preg_last_error();
+if (PHP_INT_SIZE === 8) {
+    var_dump($r === false && $e === PREG_JIT_STACKLIMIT_ERROR);
+} else {
+    var_dump(($r === false && $e === PREG_JIT_STACKLIMIT_ERROR) || ($r === 1 && $e === PREG_NO_ERROR));
+}
 ?>
 --EXPECT--
-bool(false)
 bool(true)

@@ -56,6 +56,9 @@ The original tables use ☐ for open, ◐ for in progress, and ☑ for shipped.
 | [CVE-2026-6103](CVE-2026-6103-analysis.md) | `0222` | PHAR TAR entry size and block alignment |
 | [CVE-2025-1218](CVE-2025-1218-analysis.md) | `0223` | mysqlnd length fields and packet readers |
 | [CVE-2026-7568](CVE-2026-7568-analysis.md) | `0224` | metaphone index width |
+| [GH-25094](GH-25094-analysis.md) | `0225` | SOAP document-style lookup with missing request parts |
+| [GH-25588](GH-25588-analysis.md) | `0226` | pdo_sqlite bound parameter lifetime |
+| [GH-25089](GH-25089-analysis.md) | `0227` | PHAR zip alias length |
 
 ## Coverage review (2026-11-22)
 
@@ -110,6 +113,58 @@ CVE-2026-9672, and CVE-2026-14355. CVE-2026-17545 concerns
 [Windows-specific file I/O](https://github.com/php/php-src/security/advisories/GHSA-9f67-6fw4-hpfp).
 Earlier release history, external libraries, and other deployment profiles
 can have additional gaps.
+
+## Upstream review (2026-11-24)
+
+No php-src advisories were published after the 2026-11-19 releases. Since then,
+the PHP-8.2 and PHP-8.3 branches have received no security commits. PR #25605,
+which `0215` already includes, is still open.
+
+### Ported fixes without an advisory
+
+These fixes were merged to PHP-8.4 and later without a GHSA. Each one was
+reproduced on 7.3.33 and 7.4.33 Windows builds with the full series applied. The
+patches apply after `0224` in both branches.
+
+| Patch (both) | Fix | Affected area | Reproduced on 7.x |
+|---|---|---|---|
+| `0225` | [GH-25094](GH-25094-analysis.md) (`3589066c7c0e`) | SOAP `get_doc_function()`: unauthenticated crash of document-style servers whose operations have two or more parts | access violation on a one-element Body |
+| `0226` | [GH-25588](GH-25588-analysis.md) (`066f18f4f56a`) | pdo_sqlite: `SQLITE_STATIC` bindings read after PDO frees them | fetch loop compares against freed, overwritten memory |
+| `0227` | [GH-25089](GH-25089-analysis.md) (`61edcf9be7d1`) | PHAR zip alias length from header, not data: heap over-read, info leak via `getAlias()` | 4096-byte read from a 4-byte alias |
+
+### Open candidates (7.x code matches the vulnerable pattern; not ported yet)
+
+- CVE-2025-1735 (GHSA-hrwm-9436-5mv3): ext/pgsql and pdo_pgsql call
+  `PQescapeStringConn(..., NULL)` and cannot detect escaping errors. This is
+  separate from `0216`.
+- HTTP stream wrapper batch from 8.1.32: CVE-2025-1861 (`location[1024]`
+  truncation), CVE-2025-1734 (header lines without a colon), CVE-2025-1736
+  (`check_has_header` ignores `\r`), CVE-2025-1219 (libxml charset from the
+  pre-redirect response), and CVE-2024-11234 (CRLF through `proxy` with
+  `request_fulluri`). Port this batch together with CVE-2025-1217 (see below).
+- GH-25093: the `Phar::webPhar()` 301 redirect reads past the request URI.
+  It affects only applications that use `webPhar` under mod_php or `php -S`.
+- GH-25649: the phar handle on an entry removed with `unset()` is
+  use-after-free on flush. It needs `phar.readonly=0`.
+- GHSA-ch8v-r6jh-4vvr (`FILTER_SANITIZE_ENCODED` uninitialised entry for
+  0xFF), GHSA-wg4p-4hqh-c3g9 (`XML_OPTION_SKIP_TAGSTART` over-read),
+  GHSA-www2-q4fc-65wf (`dns_get_record()` NUL byte), CVE-2024-9026 (FPM
+  log flush marker, 7.4 only), CVE-2025-14178 (`array_merge()` count
+  overflow; needs gigabytes of memory), and the `mb_ereg_replace()` `\k<`
+  over-read without a closing delimiter (php-src #25024).
+
+### Checked and not applicable to 7.x
+
+- GH-25661 (SOAPAction with an empty Body): this needs SOAPAction-based
+  function resolution (`63e0b9ccbfe`). In 7.x, a NULL Body node is possible
+  only for document-style functions, which skip the dereference.
+- CVE-2025-14180: the 7.x PDO parser checks the quoter's return value.
+- GH-25351 (DOM `getElementById()` after removing an ID attribute): this was
+  not reproduced with libxml2 2.9.10. An ASAN check is still pending.
+- CVE-2024-2408 (Marvin) requires OpenSSL 3.2 implicit rejection; 7.x uses
+  OpenSSL 1.1.1.
+- CVE-2025-6491 requires a SoapVar name longer than 2 GB.
+- GHSA-4w77-75f9-2c8w affects only the built-in CLI server.
 
 ## Tier 1 — pre-auth RCE / memory corruption
 
